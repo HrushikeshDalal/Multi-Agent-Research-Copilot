@@ -1,0 +1,94 @@
+version: "3.9"
+
+# ── Shared network ──────────────────────────────────────────────────────────
+networks:
+  copilot-net:
+    driver: bridge
+
+# ── Named volumes ───────────────────────────────────────────────────────────
+volumes:
+  ollama-data:
+
+services:
+
+  # ── Ollama LLM host ─────────────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: copilot-ollama
+    restart: unless-stopped
+    volumes:
+      - ollama-data:/root/.ollama
+    ports:
+      - "11434:11434"
+    networks:
+      - copilot-net
+    # Pull the default model on first start.
+    # Remove or change `llama3` to whichever model you prefer.
+    entrypoint: >
+      sh -c "ollama serve &
+             sleep 8 &&
+             ollama pull llama3 &&
+             wait"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ── FastAPI backend ─────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: copilot-api
+    restart: unless-stopped
+    environment:
+      - PORT=8000
+      - RELOAD=false
+      - CORS_ORIGINS=http://localhost:8501,http://streamlit:8501
+      # Point nodes.py at the Ollama service by name
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_MODEL=llama3
+    ports:
+      - "8000:8000"
+    networks:
+      - copilot-net
+    depends_on:
+      ollama:
+        condition: service_healthy
+    command:
+      ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "info"]
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/api/v1/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ── Streamlit frontend ──────────────────────────────────────────────────
+  streamlit:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: copilot-ui
+    restart: unless-stopped
+    environment:
+      - API_BASE_URL=http://api:8000
+    ports:
+      - "8501:8501"
+    networks:
+      - copilot-net
+    depends_on:
+      api:
+        condition: service_healthy
+    command:
+      [
+        "streamlit", "run", "app/ui/streamlit_app.py",
+        "--server.port=8501",
+        "--server.address=0.0.0.0",
+        "--server.headless=true",
+        "--browser.gatherUsageStats=false"
+      ]
