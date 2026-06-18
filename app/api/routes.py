@@ -12,7 +12,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from core.graph import research_graph
+from app.core.graph import research_graph
 from core.schemas import AgentState
 
 logger = logging.getLogger(__name__)
