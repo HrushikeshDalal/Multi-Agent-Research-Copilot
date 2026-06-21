@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import json
 import logging
 import math
@@ -14,9 +15,9 @@ from app.core.schemas import AgentState, PlanModel, PlanStep
 
 logger = logging.getLogger(__name__)
 
-OLLAMA_BASE_URL = "http://ollama:11434"
-OLLAMA_MODEL = "llama3"
-REQUEST_TIMEOUT = 120.0
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
+REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "120.0"))
 
 _MOCK_CORPUS: List[Dict[str, Any]] = [
     {"id": "doc_001", "title": "Introduction to Large Language Models",
@@ -120,12 +121,12 @@ async def planner_node(state: AgentState) -> AgentState:
             if attempt == 3:
                 plan = PlanModel(steps=[PlanStep(index=1, sub_query=state.query)])
                 break
-            prompt = _build_healing_prompt(base_prompt, raw_output, json.dumps(schema_hint, indent=2))
+            prompt = _build_healing_prompt(base_prompt, raw_output, json.dumps(schema_      hint, indent=2))
     state.plan = plan.steps
     state.steps.append(f"[Planner] Decomposed query into {len(plan.steps)} sub-queries.")
     state.next_node = "retriever"
     return state
-
+        
 
 async def retriever_node(state: AgentState) -> AgentState:
     logger.info("[retriever] Fetching documents for %d sub-queries.", len(state.plan))
